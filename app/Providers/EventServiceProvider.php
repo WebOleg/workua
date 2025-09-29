@@ -2,26 +2,27 @@
 
 namespace App\Providers;
 
-use Illuminate\Auth\Events\Registered;
-use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Event;
+use App\Domain\Link\Events\LinkVisited;
+use App\Domain\Link\Listeners\RecordLinkVisit;
 
 class EventServiceProvider extends ServiceProvider
 {
     /**
-     * The event to listener mappings for the application.
+     * The event to listener mappings for the application
      *
      * @var array<class-string, array<int, class-string>>
      */
     protected $listen = [
-        Registered::class => [
-            SendEmailVerificationNotification::class,
+        LinkVisited::class => [
+            RecordLinkVisit::class,
         ],
     ];
 
     /**
-     * Register any events for your application.
+     * Register any events for your application
+     *
+     * @return void
      */
     public function boot(): void
     {
@@ -29,7 +30,9 @@ class EventServiceProvider extends ServiceProvider
     }
 
     /**
-     * Determine if events and listeners should be automatically discovered.
+     * Determine if events and listeners should be automatically discovered
+     *
+     * @return bool
      */
     public function shouldDiscoverEvents(): bool
     {

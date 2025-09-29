@@ -11,6 +11,7 @@ use App\Http\Resources\LinkResource;
 use App\Domain\Link\Exceptions\LinkNotFoundException;
 use App\Domain\Link\Exceptions\LinkExpiredException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 /**
  * LinkController
@@ -20,11 +21,11 @@ use Illuminate\Http\JsonResponse;
 class LinkController extends Controller
 {
     /**
-     * Creates a new controller instance
+     * Create a new controller instance
      * 
-     * @param LinkShortenerService $shortenerService
-     * @param LinkResolverService $resolverService
-     * @param StatisticsService $statisticsService
+     * @param LinkShortenerService $shortenerService Service for creating short links
+     * @param LinkResolverService $resolverService Service for resolving short codes
+     * @param StatisticsService $statisticsService Service for analytics
      */
     public function __construct(
         private readonly LinkShortenerService $shortenerService,
@@ -33,19 +34,30 @@ class LinkController extends Controller
     ) {}
 
     /**
-     * Creates a new shortened link
+     * Create a new shortened link
      * 
-     * @param CreateLinkRequest $request
-     * @return JsonResponse
+     * @param CreateLinkRequest $request Validated request data
+     * @return JsonResponse Created link resource
      */
     public function store(CreateLinkRequest $request): JsonResponse
     {
+        Log::channel('structured')->info('Link creation started', [
+            'url' => $request->input('url'),
+            'custom_code' => $request->input('custom_code'),
+            'ip' => $request->ip(),
+        ]);
+
         try {
             $link = $this->shortenerService->shorten(
                 $request->input('url'),
                 $request->input('ttl_minutes'),
                 $request->input('custom_code')
             );
+
+            Log::channel('structured')->info('Link created successfully', [
+                'link_id' => $link->id,
+                'short_code' => $link->short_code,
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -54,6 +66,12 @@ class LinkController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            Log::channel('structured')->error('Link creation failed', [
+                'error' => $e->getMessage(),
+                'url' => $request->input('url'),
+                'ip' => $request->ip(),
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
@@ -62,10 +80,10 @@ class LinkController extends Controller
     }
 
     /**
-     * Gets link details by short code
+     * Get link details by short code
      * 
-     * @param string $shortCode
-     * @return JsonResponse
+     * @param string $shortCode The short code to lookup
+     * @return JsonResponse Link details
      */
     public function show(string $shortCode): JsonResponse
     {
@@ -92,10 +110,10 @@ class LinkController extends Controller
     }
 
     /**
-     * Gets statistics for a link
+     * Get statistics for a link
      * 
-     * @param string $shortCode
-     * @return JsonResponse
+     * @param string $shortCode The short code to get stats for
+     * @return JsonResponse Link statistics
      */
     public function statistics(string $shortCode): JsonResponse
     {

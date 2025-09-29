@@ -9,6 +9,7 @@ use App\Domain\Link\ValueObjects\ShortCode;
 use App\Domain\Link\ValueObjects\Url;
 use App\Domain\Link\Exceptions\InvalidUrlException;
 use App\Domain\Link\Exceptions\DuplicateShortCodeException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * LinkShortenerService
@@ -20,10 +21,10 @@ class LinkShortenerService
     private const MAX_GENERATION_ATTEMPTS = 10;
 
     /**
-     * Creates a new service instance
+     * Create a new service instance
      * 
-     * @param LinkRepositoryInterface $repository
-     * @param CacheInterface $cache
+     * @param LinkRepositoryInterface $repository Link data repository
+     * @param CacheInterface $cache Cache service
      */
     public function __construct(
         private readonly LinkRepositoryInterface $repository,
@@ -31,50 +32,51 @@ class LinkShortenerService
     ) {}
 
     /**
-     * Shortens a URL and creates a new link
+     * Shorten a URL and create a new link
+     * 
+     * Uses database transaction to ensure data consistency
      * 
      * @param string $originalUrl The URL to shorten
      * @param int|null $ttlMinutes Time to live in minutes (null = no expiration)
      * @param string|null $customCode Optional custom short code
      * @return Link The created link
-     * @throws InvalidUrlException
-     * @throws DuplicateShortCodeException
+     * @throws InvalidUrlException If URL is invalid
+     * @throws DuplicateShortCodeException If custom code already exists
      */
     public function shorten(
         string $originalUrl, 
         ?int $ttlMinutes = null, 
         ?string $customCode = null
     ): Link {
-        // Validate URL
-        $url = new Url($originalUrl);
-        
-        // Generate or validate short code
-        $shortCode = $customCode 
-            ? $this->validateCustomCode($customCode)
-            : $this->generateUniqueShortCode();
+        return DB::transaction(function () use ($originalUrl, $ttlMinutes, $customCode) {
+            $url = new Url($originalUrl);
+            
+            $shortCode = $customCode 
+                ? $this->validateCustomCode($customCode)
+                : $this->generateUniqueShortCode();
 
-        // Calculate expiration time
-        $expiresAt = $ttlMinutes ? now()->addMinutes($ttlMinutes) : null;
+            $expiresAt = $ttlMinutes 
+                ? now()->addMinutes($ttlMinutes)
+                : null;
 
-        // Create the link
-        $link = $this->repository->create([
-            'original_url' => $url->value(),
-            'short_code' => $shortCode->value(),
-            'expires_at' => $expiresAt,
-        ]);
+            $link = $this->repository->create([
+                'original_url' => $url->value(),
+                'short_code' => $shortCode->value(),
+                'expires_at' => $expiresAt,
+            ]);
 
-        // Cache the link
-        $this->cacheLink($link);
+            $this->cache->put($shortCode->value(), $link, $expiresAt ? $expiresAt->diffInSeconds(now()) : 3600);
 
-        return $link;
+            return $link;
+        });
     }
 
     /**
-     * Validates a custom short code
+     * Validate custom short code
      * 
      * @param string $code The custom code to validate
-     * @return ShortCode Validated short code
-     * @throws DuplicateShortCodeException
+     * @return ShortCode Validated short code value object
+     * @throws DuplicateShortCodeException If code already exists
      */
     private function validateCustomCode(string $code): ShortCode
     {
@@ -88,39 +90,21 @@ class LinkShortenerService
     }
 
     /**
-     * Generates a unique short code
+     * Generate unique short code
      * 
-     * @return ShortCode Unique short code
-     * @throws \RuntimeException If unable to generate unique code
+     * @return ShortCode Generated unique short code
+     * @throws \RuntimeException If unable to generate unique code after max attempts
      */
     private function generateUniqueShortCode(): ShortCode
     {
-        $attempts = 0;
-
-        do {
+        for ($i = 0; $i < self::MAX_GENERATION_ATTEMPTS; $i++) {
             $shortCode = ShortCode::generate();
-            $attempts++;
 
-            if ($attempts >= self::MAX_GENERATION_ATTEMPTS) {
-                throw new \RuntimeException('Unable to generate unique short code');
+            if (!$this->repository->shortCodeExists($shortCode->value())) {
+                return $shortCode;
             }
-        } while ($this->repository->shortCodeExists($shortCode->value()));
+        }
 
-        return $shortCode;
-    }
-
-    /**
-     * Caches a link for quick retrieval
-     * 
-     * @param Link $link The link to cache
-     * @return void
-     */
-    private function cacheLink(Link $link): void
-    {
-        $ttl = $link->expires_at 
-            ? $link->expires_at->diffInSeconds(now())
-            : 86400; // 24 hours default
-
-        $this->cache->put($link->short_code, $link, $ttl);
+        throw new \RuntimeException('Unable to generate unique short code after ' . self::MAX_GENERATION_ATTEMPTS . ' attempts');
     }
 }

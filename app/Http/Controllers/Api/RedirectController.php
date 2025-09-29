@@ -4,12 +4,24 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Domain\Link\Models\Link;
-use App\Domain\Link\Models\LinkVisit;
+use App\Domain\Link\Events\LinkVisited;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
+/**
+ * RedirectController
+ * 
+ * Handles short link redirects to original URLs
+ */
 class RedirectController extends Controller
 {
+    /**
+     * Redirect short code to original URL
+     * 
+     * @param string $shortCode The short code to resolve
+     * @param Request $request The HTTP request
+     * @return RedirectResponse Redirect to original URL
+     */
     public function redirect(string $shortCode, Request $request): RedirectResponse
     {
         $link = Link::where('short_code', $shortCode)
@@ -28,13 +40,11 @@ class RedirectController extends Controller
             abort(410, 'Link has expired');
         }
 
-        LinkVisit::create([
-            'link_id' => $link->id,
-            'ip_address' => $request->ip(),
+        event(new LinkVisited($link, [
+            'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
             'referer' => $request->header('referer'),
-            'visited_at' => now(),
-        ]);
+        ]));
 
         return redirect()->away($link->original_url, 302);
     }

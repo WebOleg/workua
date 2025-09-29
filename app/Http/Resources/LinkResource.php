@@ -15,8 +15,8 @@ class LinkResource extends JsonResource
     /**
      * Transform the resource into an array
      * 
-     * @param Request $request
-     * @return array<string, mixed>
+     * @param Request $request The HTTP request
+     * @return array<string, mixed> Transformed link data
      */
     public function toArray(Request $request): array
     {
