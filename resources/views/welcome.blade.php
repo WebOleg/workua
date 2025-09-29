@@ -8,22 +8,23 @@
 </head>
 <body class="bg-gray-50 min-h-screen">
     <div class="container mx-auto px-4 py-12 max-w-4xl">
-        <!-- Header -->
         <div class="text-center mb-12">
             <h1 class="text-4xl font-bold text-gray-900 mb-2">URL Shortener</h1>
             <p class="text-gray-600">Create short, memorable links in seconds</p>
+            <button onclick="clearCache()" class="mt-2 text-sm text-red-600 hover:underline">
+                Clear Cache & Reload
+            </button>
         </div>
 
-        <!-- Main Form -->
         <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
             <form id="shortenForm">
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">
                         Long URL *
                     </label>
-                    <input 
-                        type="url" 
-                        id="url" 
+                    <input
+                        type="url"
+                        id="url"
                         required
                         placeholder="https://example.com/very/long/url"
                         class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -35,8 +36,8 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Custom Code (optional)
                         </label>
-                        <input 
-                            type="text" 
+                        <input
+                            type="text"
                             id="customCode"
                             placeholder="mycustom"
                             pattern="[a-zA-Z0-9]{6,10}"
@@ -49,8 +50,8 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Expiration (minutes, optional)
                         </label>
-                        <input 
-                            type="number" 
+                        <input
+                            type="number"
                             id="ttl"
                             placeholder="60"
                             min="1"
@@ -61,7 +62,7 @@
                     </div>
                 </div>
 
-                <button 
+                <button
                     type="submit"
                     class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors"
                 >
@@ -69,17 +70,16 @@
                 </button>
             </form>
 
-            <!-- Result -->
             <div id="result" class="hidden mt-8 p-6 bg-green-50 border border-green-200 rounded-lg">
                 <h3 class="text-lg font-semibold text-green-900 mb-4">Success!</h3>
                 <div class="flex items-center gap-2 mb-4">
-                    <input 
-                        type="text" 
-                        id="shortUrl" 
+                    <input
+                        type="text"
+                        id="shortUrl"
                         readonly
                         class="flex-1 px-4 py-2 bg-white border border-green-300 rounded-lg"
                     >
-                    <button 
+                    <button
                         onclick="copyToClipboard()"
                         class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                     >
@@ -98,23 +98,31 @@
                 </div>
             </div>
 
-            <!-- Error -->
             <div id="error" class="hidden mt-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800"></div>
         </div>
 
-        <!-- Recent Links -->
         <div class="bg-white rounded-lg shadow-lg p-8">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">Recent Links</h2>
-            <div id="recentLinks" class="space-y-4"></div>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">Recent Links</h2>
+                <span id="lastUpdate" class="text-sm text-gray-500"></span>
+            </div>
+            <div id="recentLinks" class="space-y-4">
+                <p class="text-gray-500">Loading...</p>
+            </div>
         </div>
     </div>
 
     <script>
-        const recentLinks = JSON.parse(localStorage.getItem('recentLinks') || '[]');
+        let recentShortCodes = JSON.parse(localStorage.getItem('recentShortCodes') || '[]');
+
+        function clearCache() {
+            localStorage.clear();
+            location.reload();
+        }
 
         document.getElementById('shortenForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const url = document.getElementById('url').value;
             const customCode = document.getElementById('customCode').value;
             const ttl = document.getElementById('ttl').value;
@@ -126,7 +134,10 @@
             try {
                 const response = await fetch('/api/links', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
                     body: JSON.stringify(data)
                 });
 
@@ -134,7 +145,7 @@
 
                 if (response.ok) {
                     showResult(result.data);
-                    addToRecent(result.data);
+                    addToRecent(result.data.short_code);
                     document.getElementById('shortenForm').reset();
                 } else {
                     showError(result.message || 'Failed to create short link');
@@ -149,7 +160,8 @@
             document.getElementById('error').classList.add('hidden');
             document.getElementById('shortUrl').value = data.short_url;
             document.getElementById('shortCode').textContent = data.short_code;
-            document.getElementById('expiresAt').textContent = data.expires_at ? new Date(data.expires_at).toLocaleString() : 'Never';
+            document.getElementById('expiresAt').textContent = data.expires_at ?
+                new Date(data.expires_at).toLocaleString() : 'Never';
         }
 
         function showError(message) {
@@ -165,49 +177,74 @@
             alert('Copied to clipboard!');
         }
 
-        function addToRecent(link) {
-            recentLinks.unshift(link);
-            if (recentLinks.length > 5) recentLinks.pop();
-            localStorage.setItem('recentLinks', JSON.stringify(recentLinks));
+        function addToRecent(shortCode) {
+            if (!recentShortCodes.includes(shortCode)) {
+                recentShortCodes.unshift(shortCode);
+                if (recentShortCodes.length > 5) recentShortCodes.pop();
+                localStorage.setItem('recentShortCodes', JSON.stringify(recentShortCodes));
+            }
             renderRecentLinks();
         }
 
         async function renderRecentLinks() {
             const container = document.getElementById('recentLinks');
-            if (recentLinks.length === 0) {
+            const updateTime = document.getElementById('lastUpdate');
+
+            if (recentShortCodes.length === 0) {
                 container.innerHTML = '<p class="text-gray-500">No recent links</p>';
                 return;
             }
 
-            // Fetch fresh data for each link
-            const promises = recentLinks.map(link => 
-                fetch(`/api/links/${link.short_code}`)
-                    .then(r => r.json())
-                    .then(data => data.success ? data.data : link)
-                    .catch(() => link)
-            );
+            updateTime.textContent = 'Updated: ' + new Date().toLocaleTimeString();
 
-            const freshLinks = await Promise.all(promises);
+            try {
+                const promises = recentShortCodes.map(async shortCode => {
+                    try {
+                        const response = await fetch('/api/links/' + shortCode);
+                        const result = await response.json();
+                        return result.success ? result.data : null;
+                    } catch (error) {
+                        return null;
+                    }
+                });
 
-            container.innerHTML = freshLinks.map(link => `
-                <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium text-gray-900 truncate">${link.original_url}</p>
-                        <p class="text-sm text-gray-500">
-                            <a href="${link.short_url}" target="_blank" class="text-blue-600 hover:underline">${link.short_url}</a>
-                        </p>
+                const links = (await Promise.all(promises)).filter(link => link !== null);
+
+                if (links.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500">No active links</p>';
+                    return;
+                }
+
+                container.innerHTML = links.map(link => `
+                    <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">${link.original_url}</p>
+                            <p class="text-sm text-gray-500">
+                                <a href="${link.short_url}" target="_blank" class="text-blue-600 hover:underline">
+                                    ${link.short_url}
+                                </a>
+                            </p>
+                            ${link.expires_at ? '<p class="text-xs text-orange-600 mt-1">Expires: ' + new Date(link.expires_at).toLocaleString() + '</p>' : ''}
+                        </div>
+                        <div class="ml-4 text-right">
+                            <div class="text-sm">
+                                <span class="font-bold text-2xl text-green-600">${link.visits_count || 0}</span>
+                                <span class="text-gray-500 block text-xs">total visits</span>
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                ${link.unique_visitors || 0} unique
+                            </div>
+                        </div>
                     </div>
-                    <div class="ml-4 text-sm">
-                        <span class="font-semibold text-green-600">${link.visits_count || 0}</span>
-                        <span class="text-gray-500"> visits</span>
-                    </div>
-                </div>
-            `).join('');
+                `).join('');
+
+            } catch (error) {
+                container.innerHTML = '<p class="text-red-500">Error loading links</p>';
+            }
         }
 
-        // Initial render and refresh every 5 seconds
         renderRecentLinks();
-        setInterval(renderRecentLinks, 5000);
+        setInterval(renderRecentLinks, 3000);
     </script>
 </body>
 </html>

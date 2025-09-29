@@ -12,7 +12,6 @@ class RedirectController extends Controller
 {
     public function redirect(string $shortCode, Request $request): RedirectResponse
     {
-        // Find active link
         $link = Link::where('short_code', $shortCode)
             ->where(function ($query) {
                 $query->whereNull('expires_at')
@@ -29,7 +28,6 @@ class RedirectController extends Controller
             abort(410, 'Link has expired');
         }
 
-        // Record visit
         LinkVisit::create([
             'link_id' => $link->id,
             'ip_address' => $request->ip(),
@@ -38,6 +36,6 @@ class RedirectController extends Controller
             'visited_at' => now(),
         ]);
 
-        return redirect()->away($link->original_url, 301);
+        return redirect()->away($link->original_url, 302);
     }
 }
